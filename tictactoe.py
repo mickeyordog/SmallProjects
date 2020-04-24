@@ -7,6 +7,7 @@ gameboard = np.array([['1','2','3'],
 
 
 usingComputer = True #whether computer should play as opponent
+usingPruning = True
 
 isPlaying = True
 stage = 0 #0 for setup, 1 for player turn, 2 for opponent turn
@@ -28,6 +29,7 @@ def initGame():
 	global player
 	global opponent
 	global usingComputer
+	global usingPruning
 	player = letter
 	if player == "O":
 		opponent = "X"
@@ -38,6 +40,12 @@ def initGame():
 		result = input("Do you want to play against the computer? (Y or N) ").upper()
 	usingComputer = (result == "Y")
 	print("Playing against " + ("computer" if usingComputer else "another person"))
+
+	if usingComputer:
+		result = ""
+		while not (result == "Y" or result == "N"):
+			result = input("Use pruning (optimization)? (Y or N) ").upper()
+		usingPruning = (result == "Y")
 
 #index is num 1-9, character is x or o, returns false if another move is already there
 def fillSquare(index, character, board):
@@ -75,15 +83,18 @@ def playTurn(whichPlayer, board):
 			continue
 		result = fillSquare(int(num), whichPlayer, board)
 
-def computerTurn(board):
+def computerTurn(board, shouldPrune):
 	global count
 	count = 0
-	index = minimax(board, 0, True)
-	print(f"CPU searched {count} possible end states")
+	if shouldPrune:
+		index = minimaxAB(board, 0, -math.inf, math.inf, True)
+		print(f"CPU searched {count} possible end states with pruning")
+	else:
+		index = minimax(board, 0, True)
+		print(f"CPU searched {count} possible end states without optimization")
 	fillSquare(index, opponent, board)
 	print(f"CPU played an {opponent} at ", index)
 
-#not sure best way to get best move out of this, added startingDepth
 def minimax(board, depth, isMaximizer):
 	global count #number of times run in one session
 	winner = checkGameIsOver(board)
@@ -116,6 +127,44 @@ def minimax(board, depth, isMaximizer):
 			minEval = min(eval, minEval)
 		return minEval
 
+def minimaxAB(board, depth, alpha, beta, isMaximizer):
+	global count #number of times run in one session
+	winner = checkGameIsOver(board)
+	if not winner == False:
+		count += 1
+		if winner == player:
+			return -10 + depth
+		elif winner == opponent:
+			return 10 - depth
+		else:
+			return 0
+	if isMaximizer:
+		maxEval = -math.inf
+		for i in range(countNumEmpty(board)):
+			boardCopy = np.copy(board)
+			index = fillEmpty(i, opponent, boardCopy)
+			eval = minimaxAB(boardCopy, depth + 1, alpha, beta, False)
+			if (eval > maxEval):
+				maxEval = eval
+				bestIndex = index
+			alpha = max(alpha, eval)
+			if beta <= alpha:
+				break
+		if depth == 0:
+			return bestIndex
+		return maxEval
+	else:
+		minEval = math.inf
+		for i in range(countNumEmpty(board)):
+			boardCopy = np.copy(board)
+			fillEmpty(i, player, boardCopy)
+			eval = minimaxAB(boardCopy, depth + 1, alpha, beta, True)
+			minEval = min(eval, minEval)
+			beta = min(eval, beta)
+			if beta <= alpha:
+				break
+		return minEval
+
 #this is an unintuitive function, should have made one to check if game over, then 
 #another to check winner
 def checkGameIsOver(board):
@@ -146,7 +195,7 @@ while isPlaying:
 	global winner
 	if stage == 0:
 		initGame()
-		stage = 1
+		stage = 2
 
 	elif stage == 1:
 		playTurn(player, gameboard)
@@ -159,7 +208,7 @@ while isPlaying:
 
 	elif stage == 2:
 		if usingComputer:
-			computerTurn(gameboard)
+			computerTurn(gameboard, usingPruning)
 		else:
 			playTurn(opponent, gameboard)
 		drawBoard(gameboard)
